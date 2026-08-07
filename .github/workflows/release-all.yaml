@@ -1,0 +1,115 @@
+name: Release All
+run-name: ${{ format('{0} {1}', inputs.is-dry-run && 'Dry-run' || 'Release', inputs.tag) }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag / Version number (e.g. 1.0.1)"
+        required: true
+      is-dry-run:
+        description: "Dry-run (trigger dry-runs on all repos, no publish)"
+        type: boolean
+      modules:
+        description: "Comma-separated repo names to release (blank = all)"
+        required: false
+      lib-version:
+        description: "ModpackLib dependency version to pin in child releases (blank keeps current pins)"
+        required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  TOOLS_REF: "release-tools-V3"
+
+jobs:
+  release:
+    name: Trigger releases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check release dispatch token
+        env:
+          RELEASE_DISPATCH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_DISPATCH_TOKEN" ]; then
+            echo "::error title=Missing RELEASE_DISPATCH_TOKEN::Set a repository or organization secret named RELEASE_DISPATCH_TOKEN using a fine-grained PAT or GitHub App token with Contents: read and Actions: read/write access to the shell, coordinator, and module repositories."
+            exit 1
+          fi
+
+      - name: Verify shell CI passed for release commit
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          ci_run=$(gh run list \
+            --repo "$REPO" \
+            --workflow "ci.yaml" \
+            --commit "$SHA" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -z "$ci_run" ]; then
+            echo "::error title=CI has not passed::No successful ci.yaml run was found for $SHA. Push the shell commit and wait for CI before release_all."
+            exit 1
+          fi
+          echo "Found successful CI run $ci_run for $SHA."
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          submodules: recursive
+          token: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+
+      - name: Validate platform dependency versions
+        run: python3 ModpackTools/validate_platform_versions.py
+
+      - name: Validate release plan
+        env:
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.is-dry-run }}
+          FILTER: ${{ inputs.modules }}
+          LIB_VERSION: ${{ inputs['lib-version'] }}
+        run: |
+          args=(
+            --org "h2pack-runplanner"
+            --team "adamantRunPlanner"
+            --coordinator-repo "adamantRunPlanner-RunPlanner_Modpack"
+            --tag "$TAG"
+            --child-dry-run "$DRY_RUN"
+            --targets "$FILTER"
+            --pin-coordinator-module-deps
+            --module-field "tools-ref=$TOOLS_REF"
+            --coordinator-field "tools-ref=$TOOLS_REF"
+          )
+          if [ -n "$LIB_VERSION" ]; then
+            args+=(--module-field "lib-version=$LIB_VERSION")
+            args+=(--coordinator-field "lib-version=$LIB_VERSION")
+          fi
+          python3 ModpackTools/github/release_all.py "${args[@]}" --plan-only
+
+      - name: Trigger release workflows
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.is-dry-run }}
+          FILTER: ${{ inputs.modules }}
+          LIB_VERSION: ${{ inputs['lib-version'] }}
+        run: |
+          args=(
+            --org "h2pack-runplanner"
+            --team "adamantRunPlanner"
+            --coordinator-repo "adamantRunPlanner-RunPlanner_Modpack"
+            --tag "$TAG"
+            --child-dry-run "$DRY_RUN"
+            --targets "$FILTER"
+            --verify-ci
+            --pin-coordinator-module-deps
+            --module-field "tools-ref=$TOOLS_REF"
+            --coordinator-field "tools-ref=$TOOLS_REF"
+          )
+          if [ -n "$LIB_VERSION" ]; then
+            args+=(--module-field "lib-version=$LIB_VERSION")
+            args+=(--coordinator-field "lib-version=$LIB_VERSION")
+          fi
+          python3 ModpackTools/github/release_all.py "${args[@]}"

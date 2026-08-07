@@ -1,0 +1,12 @@
+[submodule "adamant-ModpackLib"]
+	path = adamant-ModpackLib
+	url = https://github.com/h2-modpack/adamant-ModpackLib.git
+	branch = main
+[submodule "adamantRunPlanner-RunPlanner_Modpack"]
+	path = adamantRunPlanner-RunPlanner_Modpack
+	url = https://github.com/h2pack-runplanner/adamantRunPlanner-RunPlanner_Modpack.git
+	branch = main
+[submodule "ModpackTools"]
+	path = ModpackTools
+	url = https://github.com/h2-modpack/ModpackTools.git
+	branch = main

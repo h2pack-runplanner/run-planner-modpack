@@ -10,3 +10,7 @@
 	path = ModpackTools
 	url = https://github.com/h2-modpack/ModpackTools.git
 	branch = main
+[submodule "Submodules/adamantRunPlanner-Plan_Executor"]
+	path = Submodules/adamantRunPlanner-Plan_Executor
+	url = https://github.com/h2pack-runplanner/adamantRunPlanner-Plan_Executor.git
+	branch = main
